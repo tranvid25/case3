@@ -36,42 +36,54 @@ switch ($method) {
         break;
 
     case 'PUT':
-    case 'PATCH':
-        if (!isset($data['id'])) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Thiếu trường "id" để cập nhật.']);
-            exit;
-        }
-        foreach (['hr', 'pr'] as $target) {
-            $mapped = mapData($data, $mapping[$target]);
-            $urlWithId = $urls[$target] . '/' . $data['id'];
-            $ok = sendToApi($urlWithId, $mapped, 'PUT');
-            if (!$ok) {
-                pushToQueue($target, array_merge(['id' => $data['id']], $mapped));
-                $responses[$target] = 'Cập nhật thất bại, đã vào queue';
-            } else {
-                $responses[$target] = 'Cập nhật thành công';
-            }
-        }
-        break;
+case 'PATCH':
+    $id = $data['id'] ?? ($_GET['id'] ?? null);
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Thiếu trường "id" để cập nhật.']);
+        exit;
+    }
+    if (!is_array($data)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Dữ liệu JSON không hợp lệ.']);
+        exit;
+    }
 
+    foreach (['hr', 'pr'] as $target) {
+        $mapped = mapData($data, $mapping[$target]);
+        $urlWithId = $urls[$target] . '/' . $id;
+        $ok = sendToApi($urlWithId, $mapped, $method);  // Giữ đúng method PUT hoặc PATCH
+
+        if (!$ok) {
+            pushToQueue($target, array_merge(['id' => $id], $mapped));
+            $responses[$target] = 'Cập nhật thất bại, đã vào queue';
+        } else {
+            $responses[$target] = 'Cập nhật thành công';
+        }
+    }
+    break;
     case 'DELETE':
-        if (!isset($data['id'])) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Thiếu trường "id" để xóa.']);
-            exit;
+    // Hỗ trợ cả body JSON lẫn query string
+    $id = $data['id'] ?? ($_GET['id'] ?? null);
+
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Thiếu trường "id" để xóa.']);
+        exit;
+    }
+
+    foreach (['hr', 'pr'] as $target) {
+        $urlWithId = $urls[$target] . '/' . $id;
+        $ok = sendToApi($urlWithId, [], 'DELETE');
+        if (!$ok) {
+            pushToQueue($target, ['id' => $id, '_delete' => true]);
+            $responses[$target] = 'Xóa thất bại, đã vào queue';
+        } else {
+            $responses[$target] = 'Xóa thành công';
         }
-        foreach (['hr', 'pr'] as $target) {
-            $urlWithId = $urls[$target] . '/' . $data['id'];
-            $ok = sendToApi($urlWithId, [], 'DELETE');
-            if (!$ok) {
-                pushToQueue($target, ['id' => $data['id'], '_delete' => true]);
-                $responses[$target] = 'Xóa thất bại, đã vào queue';
-            } else {
-                $responses[$target] = 'Xóa thành công';
-            }
-        }
-        break;
+    }
+    break;
+
 
     default:
         http_response_code(405);
