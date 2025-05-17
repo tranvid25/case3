@@ -11,14 +11,29 @@ function mapData($data, $map) {
     return $result;
 }
 
-function sendToApi($url, $data) {
-    $client = new Client();
+function sendToApi($url, $data, $method = 'POST') {
+    $client = new \GuzzleHttp\Client();
     try {
-        $res = $client->post($url, ['json' => $data]);
-        return $res->getStatusCode() === 200;
+        $res = $client->request($method, $url, ['json' => $data]);
+        $status = $res->getStatusCode();
+        if ($status >= 200 && $status < 300) {
+            return true;
+        } else {
+            error_log("API trả về status code không thành công: $status, body: " . $res->getBody());
+            return false;
+        }
+    } catch (\GuzzleHttp\Exception\RequestException $e) {
+        error_log("Lỗi gửi request đến API: " . $e->getMessage());
+        if ($e->hasResponse()) {
+            error_log("Response body: " . $e->getResponse()->getBody());
+        }
+        return false;
     } catch (Exception $e) {
-        error_log("Lỗi gửi API: " . $e->getMessage());
+        error_log("Lỗi khác: " . $e->getMessage());
         return false;
     }
 }
+
+
+
 
