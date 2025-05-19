@@ -17,6 +17,56 @@ $urls = [
 $responses = [];
 
 switch ($method) {
+    case 'GET':
+    $errors = [];
+
+    // Hàm lấy dữ liệu GET từ API (nên đặt ra ngoài hàm chính)
+    function getFromApi($url) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+        $response = curl_exec($ch);
+        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpcode == 200) {
+            return json_decode($response, true);
+        }
+        return false;
+    }
+
+    // Lấy dữ liệu từ 2 API
+    $dataHR = getFromApi($urls['hr']);
+    if ($dataHR === false) {
+        $dataHR = [];
+        $errors['hr'] = 'Lỗi lấy dữ liệu từ API HR';
+    } else {
+        // Thêm trường source để phân biệt
+        foreach ($dataHR as &$item) {
+            $item['source'] = 'HR';
+        }
+    }
+
+    $dataPR = getFromApi($urls['pr']);
+    if ($dataPR === false) {
+        $dataPR = [];
+        $errors['pr'] = 'Lỗi lấy dữ liệu từ API PR';
+    } else {
+        foreach ($dataPR as &$item) {
+            $item['source'] = 'PR';
+        }
+    }
+
+    // Gộp dữ liệu 2 bên
+    $combinedData = array_merge($dataHR, $dataPR);
+
+    echo json_encode([
+        'message' => 'Lấy dữ liệu thành công',
+        'data' => $combinedData,
+        'errors' => $errors
+    ]);
+    exit;
+
     case 'POST':
         if (!$data) {
             http_response_code(400);
