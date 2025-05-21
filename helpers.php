@@ -1,11 +1,11 @@
 <?php
 use GuzzleHttp\Client;
 
-function mapData($data, $map) {
+function mapDataToTarget(array $input, array $mapping, string $target): array {
     $result = [];
-    foreach ($map as $to => $from) {
-        if (isset($data[$from])) {
-            $result[$to] = $data[$from];
+    foreach ($mapping['fields'] as $key => $targets) {
+        if (isset($input[$key]) && !empty($targets[$target])) {
+            $result[$targets[$target]] = $input[$key];
         }
     }
     return $result;
