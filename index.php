@@ -1,6 +1,6 @@
 <?php
 require 'vendor/autoload.php';
-$mapping = require 'mapping.php'; // $mapping = ['fields' => [...]]
+$mapping = require 'mapping.php'; // $mapping = ['hr' => [...], 'pr' => [...]]
 require 'helpers.php';
 require 'queue.php';
 
@@ -13,6 +13,29 @@ $urls = [
     'hr' => 'http://localhost:5000/api/employees',
     'pr' => 'http://localhost:8000/api/employees',
 ];
+if (isset($data['name'])) {
+    $split = splitName($data['name']);
+    $data['First_Name'] = $split['firstName']; // cho HR
+    $data['Last_Name'] = $split['lastName'];   // cho HR
+    $data['firstName'] = $split['firstName']; // cho PR
+    $data['lastName'] = $split['lastName'];   // cho PR
+}
+mapCommonFields($data);
+// Hàm lấy dữ liệu từ API (GET)
+function getFromApi($url)
+{
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+    $response = curl_exec($ch);
+    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpcode == 200) {
+        return json_decode($response, true);
+    }
+    return false;
+}
 
 $responses = [];
 
@@ -20,30 +43,16 @@ switch ($method) {
     case 'GET':
         $errors = [];
 
-        // Hàm lấy dữ liệu GET từ API
-        function getFromApi($url) {
-            $ch = curl_init($url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
-            $response = curl_exec($ch);
-            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpcode == 200) {
-                return json_decode($response, true);
-            }
-            return false;
-        }
-
-        // Lấy dữ liệu từ 2 API
         $dataHR = getFromApi($urls['hr']);
         if ($dataHR === false) {
             $dataHR = [];
             $errors['hr'] = 'Lỗi lấy dữ liệu từ API HR';
         } else {
+            // Thêm trường source để phân biệt
             foreach ($dataHR as &$item) {
                 $item['source'] = 'HR';
             }
+            unset($item);
         }
 
         $dataPR = getFromApi($urls['pr']);
@@ -54,6 +63,7 @@ switch ($method) {
             foreach ($dataPR as &$item) {
                 $item['source'] = 'PR';
             }
+            unset($item);
         }
 
         // Gộp dữ liệu 2 bên
@@ -74,8 +84,8 @@ switch ($method) {
         }
 
         foreach (['hr', 'pr'] as $target) {
-            // mapDataToTarget nhận $mapping (toàn bộ), target là 'hr' hoặc 'pr'
-            $mapped = mapDataToTarget($data, $mapping, $target);
+            // mapData nhận $mapping tương ứng, target là 'hr' hoặc 'pr'
+            $mapped = mapData($data, $mapping[$target]);
             $ok = sendToApi($urls[$target], $mapped, 'POST');
             if (!$ok) {
                 pushToQueue($target, $mapped);
@@ -99,11 +109,12 @@ switch ($method) {
             echo json_encode(['error' => 'Dữ liệu JSON không hợp lệ.']);
             exit;
         }
-
+        $fieldsHR = array_keys($mapping['hr']);
+        $fieldsPR = array_keys($mapping['pr']);
         foreach (['hr', 'pr'] as $target) {
-            $mapped = mapDataToTarget($data, $mapping, $target);
+            $mapped = mapData($data, $mapping[$target]);
             $urlWithId = $urls[$target] . '/' . $id;
-            $ok = sendToApi($urlWithId, $mapped, $method);  // Giữ đúng method PUT hoặc PATCH
+            $ok = sendToApi($urlWithId, $mapped, $method);  // PUT hoặc PATCH
 
             if (!$ok) {
                 pushToQueue($target, array_merge(['id' => $id], $mapped));
